@@ -1,0 +1,177 @@
+---
+title: "Midterm 2"
+author: "Evan Tiffany"
+date: "12/5/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+## Introduction
+
+To analyze the economic and geographical effects that hometowns have on the future success of individuals, this report will utilize data obtained by Chetty, Raj, Nathaniel Hendren, Patrick Kline and Emmanuel Saez (2014). This data was originally used in the report "Where is the Landof Opportunity? The Geography of Intergenerational Mobility in the United States.” published in the Quarterly Journal of Economics. The dataset contains 43 variables with different types of background information for each of the 741 cities chosen. This includes data on education, race, crime, home life, the economy, and much more. With this data, I aim to create a model that can accurately predict the possibility of success of an individual based on his or her situation growing up. Through this model, it should be evident in which areas of the United States growth is most present as well as what other variables play into an individual's economic growth. 
+
+```{r, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(maps)
+library(sf)
+library(lattice)
+library(choroplethrMaps)
+library(usmap)
+
+mob <- filter(read.csv('mobility.csv'), State != "AK") %>% 
+  filter(State != 'HI')
+
+for i
+if (mob$State in c("CT", "MA", "ME", "NH", "RI", "VT", "NJ", "NY", "PA")) {
+  
+}
+```
+
+
+## Exploratory Data Analysis
+
+```{r, echo=FALSE}
+ggplot(mob, aes(x = Mobility)) + geom_density()
+```
+
+As we see in the density plot above, the data on mobility is right skewed with its peak around 0.1. This shows the low likelihood of economic mobility in America adn how some places have unusually high economic mobility, meaning in these locations its easier to move up the economic ladder. 
+
+
+```{r, echo=FALSE}
+ggplot(mob, aes(x = Mobility, y = School_spending, color = Gini)) + geom_point() + facet_wrap(~ Urban) + geom_smooth(se = FALSE) + scale_color_gradient(low = "white", high = "blue")
+```
+
+In this plot we see not only that school spending has an increasing relationship with mobility, appearing to have diminishing returns which could partially be due to the right skew of the mobility data. Since there are less points on the higher end (.2 on) in terms of mobility score, faceting this graph split up those few points, giving them more leverage over the smoother, therefore affecting this trend. Additionally, the inclusion of the Gini index shows a lot lower gini indices in the rural data, seen by the higher density of the lighter shades of blue, specifically on the higher end of mobility, in comparison to the darker blue plotted points for the urban data. We see an overall trend toward lower gini indices (lighter blue color) when mobility increases and overall higher mobility scores for the rural data.
+
+```{r}
+ggplot(mob, aes(x = Student_teacher_ratio, y = Test_scores, color = Mobility)) + geom_point() + scale_color_gradient(low = "white", high = "blue")
+```
+
+This plot shows that lower student/teacher ratios provide for higher test scores. Additionally the gradient aims to show each explanatory variables effect on mobility. There appears to be very little relationship between student/teacher ratio and mobility but its clear that mobility increases with test scores.
+
+```{r, echo=FALSE}
+ggplot(mob, aes(x = School_spending, y = Test_scores)) + geom_density2d()
+```
+
+With this density plot we can see the highest density around the average test score, for obvious reasons, but also at a school spending level of 6. Overall these two predictors appear to both have relatively normal distributions. 
+
+```{r}
+ggplot(mob, aes(x = Longitude, y = Latitude, color = Mobility)) + geom_point() + scale_color_gradient(low = "blue", high = "red")
+
+##Fix this
+```
+
+This scatterplot shows the highest mobility in the nothern part of the country. The coastal areas seem to have less mobility which makes sense. As shown prior, the urban areas have lower mobility, which would be due to the high population and, going along with the predictors we've seen, a higher student/teacher ratio which leads to lower test scores. The lowest areas are shown to be in the southeast, around Alabama, Florida, and Georgia. These areas are known to have lower achieving schools which would account for the low mobility. 
+
+```{r, echo=FALSE}
+library(ggpubr)
+mob.2 <- na.omit(select(mob, c("ID", "Mobility", "Population", "Income","Gini", "School_spending", "Test_scores")))
+print("Mobility and Population")
+print('Pearson')
+cor(mob.2$Mobility, mob.2$Population, method = "pearson")
+print('Kendall')
+cor(mob.2$Mobility, mob.2$Population, method = "kendall")
+print('Spearman')
+cor(mob.2$Mobility, mob.2$Population, method = "spearman")
+print("Mobility and Income")
+print('Pearson')
+cor(mob.2$Mobility, mob.2$Income)
+print('Kendall')
+cor(mob.2$Mobility, mob.2$Income, method = 'kendall')
+print('Spearman')
+cor(mob.2$Mobility, mob.2$Income, method = 'spearman')
+print("Mobility and Gini index")
+print('Pearson')
+cor(mob.2$Mobility, mob.2$Gini)
+print('Kendall')
+cor(mob.2$Mobility, mob.2$Gini, method = 'kendall')
+print('Spearman')
+cor(mob.2$Mobility, mob.2$Gini, method = 'spearman')
+print("Mobility and School Spending")
+print('Pearson')
+cor(mob.2$Mobility, mob.2$School_spending)
+print('Kendall')
+cor(mob.2$Mobility, mob.2$School_spending, method = 'kendall')
+print('Spearman')
+cor(mob.2$Mobility, mob.2$School_spending, method = 'spearman')
+print("Mobility and Test Scores")
+print('Pearson')
+cor(mob.2$Mobility, mob.2$Test_scores)
+print('Kendall')
+cor(mob.2$Mobility, mob.2$Test_scores, method = 'kendall')
+print('Spearman')
+cor(mob.2$Mobility, mob.2$Test_scores, method = 'spearman')
+```
+
+As shown, the Gini index and test scores were had the highest correlations with mobility. To find this, I ran correlation tests of differing methods: Pearson, Kendall and Spearman. The Spearman tests overall seemed to give the highest correlations. Kendall and Spearman would give the best correlations as the Pearson correlation is for linear relationships, which is unlikely as weve seen the data is skewed. The two highest correlations are shown in the scatterplots below.
+
+```{r}
+ggplot(mob.2, aes(x = mob.2$Gini, y = mob.2$Mobility)) + geom_point() + geom_smooth(se = FALSE) + stat_cor(method = 'kendall', label.x.npc = 0.6, label.sep = ", Kendall, ")
+
+ggplot(mob.2, aes(x = mob.2$Test_scores, y = mob.2$Mobility)) + geom_point() + geom_smooth(se = FALSE) + stat_cor(method = 'kendall', label.sep = ", Kendall, ")
+```
+
+Again, these make sense as test scores tend to decide the future of students. Additionally, the Gini index, showing income gaps, would be great for predicting the possibility of movement upward in life. 
+
+## Density and ECDFs
+
+```{r, echo = FALSE}
+ggplot(mob.2, aes(x = Gini)) + geom_density() + ggtitle("Density of Gini Index")
+ggplot(mob.2, aes(x = Gini)) + stat_ecdf() + ggtitle('ECDF of Gini Index')
+
+
+ggplot(mob.2, aes(x = Test_scores)) + geom_density() + ggtitle("Density of Test Scores")
+ggplot(mob.2, aes(x = Test_scores)) + stat_ecdf() + ggtitle("ECDF of Gini Index")
+```
+
+The density plots are both slightly skewed but appear approximately normal other than that. The Gini index is skewed right while the Test scores are skewed left. These both, however, appear approximately normal aside from the skewness. The test score variable is shown to be a standardized score, since the highest density is right around 0. The Gini index has its peak around 0.4, showing most of the data comes from places with low Gini indices, meaning the data comes from pretty equal areas, with very few observations on the extremely inequal side. The ECDFs also show approximate normality with the s curves. They both look relatively smooth as well, which is due to the number of observations.
+
+## Density Plots
+
+### Conditional 
+```{r}
+library(np)
+print('Gini')
+mob.cdens <- npcdens(Mobility~Gini, data = mob.2)
+grid <- expand.grid(Gini = seq(0, 0.8, 0.01), Mobility = seq(0, 0.4, 0.01))
+fhat = predict(mob.cdens, newdata= grid)
+wireframe(fhat~grid$Gini*grid$Mobility, xlab = "Gini", ylab = "Mobility", zlab = "pdf")
+
+print('Test Scores')
+mob.cdens <- npcdens(Mobility~Test_scores, data = mob.2)
+grid <- expand.grid(Test_scores = seq(-20, 30, 0.5), Mobility = seq(0, 0.4, 0.01))
+fhat = predict(mob.cdens, newdata= grid)
+wireframe(fhat~grid$Test_scores*grid$Mobility, xlab = "Test Scores", ylab = "Mobility", zlab = "pdf")
+```
+
+The curved relationship shows in the conditional density plot between Gini index and mobility.This graphic shows that there are high densities at the extremes of the gini index, whereas the data in the middle, though there are more points, are less condensed in terms of mobility. At low and high values of the Gini index, mobility is high, with a dip in the middle Gini indices The conditional density plot for test scores has a lot more noise, showing less of a direct relationship. The data appears to be a lot more correlated since the densities are higher and almost linear. We can see a large spike in density at high test scores and a mobility that appears to be between 0.2 and 0.3. Gradually, however, the relationship appears to favor higher mobility at higher test scores. 
+
+### Marginal 
+
+```{r}
+library(ggExtra)
+g = ggplot(mob.2, aes(x = Gini, y = Mobility, color = Test_scores)) + geom_point() + scale_color_gradient(low = 'blue', high ='red')
+ggMarginal(g, type = "density")
+
+g1 = ggplot(mob.2, aes(x = Test_scores, y = Mobility, color = Gini)) + geom_point()+ scale_color_gradient(low = 'blue', high ='red')
+ggMarginal(g1, method = 'density')
+```
+
+These plots show the marginal densities on each axis. We can see mobility and test scores are left skewed while the Gini index is right skewed. Additionally, color was added to each plot to show the interaction of each predictor. 
+
+```{r}
+ggplot(lm(Mobility ~ Gini + Test_scores, mob.2), aes(x = .fitted, y = .resid)) + geom_point() + geom_smooth(se = FALSE)
+### 3d smoother
+```
+
+As shown, we can see the residuals are a bit left skewed and not perfectly aligned on the axis. They are a bit parabolic as well. This wouldn't be a great model, however it still would be decent at prediction. 
+
+
+## Conclusions
+
+Overall, this data has shown correlations between a child's upbringing and the future of a child, from race to location to education. We see the degree of impact every detail has on someone. My focus was primarily on the socioeconomic level of a person's hometown with education as shown through test scores. I believe that these are two good markings of how someone will turnout. In the beginning I wanted my focus solely on education, but saw that simplifying a model to one factor will not produce good results. To find the best results, a model should probably include more than even two of these predictors, however, that makes it much less interpretable.

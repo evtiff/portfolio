@@ -1,0 +1,238 @@
+---
+title: "Global Mismanaged Waste"
+author: "Ann Marie, Alli, Amanda, Evan"
+date: "12/10/2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F, message = F)
+
+library(tidyverse)
+library(ggplot2)
+library(maps)
+library(ggthemes)
+library(broom)
+library(gridExtra)
+library(ggpubr)
+library(countrycode)
+library(ggExtra)
+library(stats)
+library(mgcv)
+```
+
+### Introduction
+
+The accumulation of mismanaged plastic waste in the environment is a global growing concern. Knowing with precision where litter is generated is important to target priority areas for the implementation of new mitigation policies. In this project, using country-level data on waste management combined with world population distributions and long-term projections of population and the gross domestic product (GDP), we wanted to investigate whether or not GDP was the sole culprit in determining mismanaged waste per person per day. This is important becasue mismanaged waste is causing hundreds of thousands of people to die each year in the developing world from easily preventable causes, and plastic waste especially is adding a new and dangerous dimension to the problem. 
+
+For the purpose of this project we used three different data sets from an article on the Our World in Data site. The data is combined with gapminder world census data. The article explores the long-term impact of mismanaged litter and the chemical, ecological, behavioral, physical and health consequences of  it.
+
+## The Data
+
+This data was made available by Our World in Data, an online publication that focused on large-scale global issues, such as poverty, inequality, war, disease, and climate change.  The data was gathered by researchers at Oxford University, and included 9 variables.  Variables included country name, country code (or abreviation), year, per capita GDP, per capita plastic waste, total mismanaged waste, per capita mismanaged waste, coastal population, and total population. This data was then merged with Gapminder data, which contained mapping information that allowed us to visualize plastic waste on a global scale.
+
+The data sets each had 186 observations for each of the variables.  It should be noted that data is not provided for some countries due to either practical or logistical challenges in gathering data in these areas.  These countries include but not limited to Bolivia, Kazakhstan, Paraguay, Mongolia, Afghanistan and some central African countries.
+
+```{r echo=F, message=F, warning=F} 
+popVWaste = filter(read.csv('coastal-population-vs-mismanaged-plastic.csv'), Coastal.population != "NA")
+wasteVGDP = filter(read.csv('per-capita-mismanaged-plastic-waste-vs-gdp-per-capita.csv'), Per.capita.mismanaged.plastic.waste..kilograms.per.person.per.day. != 'NA')
+waste = filter(read.csv('per-capita-plastic-waste-vs-gdp-per-capita.csv'), Per.capita.plastic.waste..kilograms.per.person.per.day. != 'NA')
+
+dat = left_join(popVWaste, waste, by = c("Entity", "Code", "Year", "Total.population..Gapminder."))
+dat = left_join(dat, wasteVGDP, by = c("Entity", "Code", "Year", "Total.population..Gapminder."))
+dat <- dat[,0:9]
+colnames(dat) <- c("Entity", "Code", "Year", "MismanagedWaste", "CoastalPopulation", "TotalPopulation", "PerCapitaPlasticWaste", "GDPPerCapita", "PerCapitaMismanagedWaste")
+dat$Continent <- countrycode(dat$Entity, origin = "country.name", destination = "continent")
+
+dat$pctCoast <- dat$CoastalPopulation/dat$TotalPopulation
+
+map.dat <- map_data("world")
+map.dat$region <- gsub(paste0("\\b(",paste("USA", collapse="|"),")\\b"), "United States", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("UK", collapse="|"),")\\b"), "United Kingdom", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Virgin Islands", collapse="|"),")\\b"), "British Virgin Islands", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Ivory Coast", collapse="|"),")\\b"), "Cote d'Ivoire", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Faroe Islands", collapse="|"),")\\b"), "Faeroe Islands", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Republic of Congo", collapse="|"),")\\b"), "Congo", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Micronesia", collapse="|"),")\\b"), "Micronesia (country)", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Saint Martin", collapse="|"),")\\b"), "Sint Maarten (Dutch part)", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Trinidad", collapse="|"),")\\b"), "Trinidad and Tobago", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Tobago", collapse="|"),")\\b"), "Trinidad and Tobago", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Antigua", collapse="|"),")\\b"), "Antigua and Barbuda", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Barbuda", collapse="|"),")\\b"), "Antigua and Barbuda", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Saint Kitts", collapse="|"),")\\b"), "Saint Kitts and Nevis", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Nevis", collapse="|"),")\\b"), "Saint Kitts and Nevis", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Saint Vincent", collapse="|"),")\\b"), "Saint Vincent and the Grenadines", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Grenadines", collapse="|"),")\\b"), "Saint Vincent and the Grenadines", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Democratic Republic of the Congo", collapse="|"),")\\b"), "Democratic Republic of Congo", map.dat$region)
+map.dat$region <- gsub(paste0("\\b(",paste("Mongolia", collapse="|"),")\\b"), "Mongolia", map.dat$region)
+
+colnames(map.dat) <- c("long", "lat", "group", "order", "Entity", "subregion")
+
+
+map.dat <- full_join(dat, map.dat, by = "Entity")
+try <- filter(map.dat, is.na(lat))
+map.dat$Continent <- countrycode(map.dat$Entity, origin = "country.name", destination = "continent")
+
+dat <- filter(dat, !(is.na(Continent)))
+```
+
+##Objective and Goals:
+
+Our group's objective for this project is to determine what the main predictors of mismanaged waste. We are hypothesizing that GDP per capita is the most indicative predictor of mismanaged waste per country. Additionally, we are hoping to find another good predictor in addition to GDP, giving more explanation into high mismanagement of waste.
+
+### Our Predictors
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+g = ggplot(dat, aes(x = log(GDPPerCapita), y = log(PerCapitaMismanagedWaste))) + geom_point() + geom_smooth(se = FALSE)+xlab("GDP Per Capita (log scale)")+ylab("Mismanaged Waste Per Capita")+ggtitle("Association Between GDP Per Capita 
+and Mismanaged Waste Per Capita")+theme_calc()
+
+ggMarginal(g, type = "density") 
+```
+
+The plot above shows the relationship between GDP per capita and per capita mismanaged waste. We see a downward slope to the plot, however it does not appear perfectly linear. Additionally, this plot shows the densities of each variable on the axis. The log was taken of these due to the left skew in both. 
+
+```{r}
+ggplot(dat, aes(x = log(GDPPerCapita), y = log(PerCapitaMismanagedWaste))) + geom_point() + geom_smooth(method = 'lm', se = FALSE) + facet_wrap(~Continent)+ xlab("GDP Per Capita (log scale)")+ylab("Mismanaged Waste Per Capita")+ggtitle("Association Between GDP Per Capita and Mismanaged Waste Per Capita 
+by Continent")+theme_calc()
+```
+
+This faceted plot shows the same predictors split by continent. It's obvious through this plot that the continents have differing effects in terms of the relationship between GDP and mismanaged waste, specifically in Africa. The relationship is slightly positive in Africa whereas it is negative in every other continent. Also, the correlations of each continent appear to be very high, which shows a strong relationship with continent as a predictor. 
+
+```{r,echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(dat, aes(x = pctCoast, y = log(PerCapitaMismanagedWaste), color = Continent)) + geom_point() + geom_smooth(method= 'lm',se = FALSE)+theme_calc() +xlab("Percentage Coastal Population (log scale)")+ylab("Mismanaged Waste Per Capita (log scale)")+ggtitle("Association between Percentage Coastal Population and 
+Mismanaged Waste Per Capita")
+```
+
+For this plot, we created a coastal population percentage variable which took the coastal population variable and divided it by the total population. We are unsure why there are percentages above one, but the data matches this with a higher coastal population than total population. This would be something to look into for the future. This plot does, however, show that the percent coastal population variable has some effect, specifically in terms of continent. 
+
+
+#Another Comparison of Plastic Waste to Mismanaged Waste
+```{r,echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(na.omit(dat), aes(x = log(GDPPerCapita), y = log(PerCapitaMismanagedWaste), color = Continent, size=TotalPopulation, label=Entity)) + geom_point()+theme_calc()+xlab("GDP Per Capita (log scale)")+ylab("Mismanaged Waste Per Capita (log scale)")+ggtitle("Association Between GDP and Mismanaged Waste")
+## add label to JUST trinedad 
+
+ggplot(na.omit(dat), aes(x = log(GDPPerCapita), y = log(PerCapitaMismanagedWaste), label=Entity)) + stat_density2d() + facet_wrap(~Continent)+theme_calc()+xlab("GDP Per Capita (log scale)")+ylab("Mismanaged Waste Per Capita (log scale)")+ggtitle("Density Plot Modeling the Association Between GDP and Mismanaged Waste
+by Continent")
+```
+
+The first plot above combines GDP and continent as predictors for mismanaged waste. This time, population was added, but no clear relationship can be seen with this variable. The second faceted plot shows the 2d densities of our variables by continent. The biggest takeaway for us in this plot is the bimodal density in Asia, which most probably shows the difference between southeast asia and the rest of Asia. We can also see that oceania has some outlier points, which is simply due to the small data provided.  
+
+### Which countries are contributing most to plastic waste on Earth? How does this compare to the mismanagement of waste?
+
+*Map of countries showing log GDP*
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(map.dat, aes(long, lat, group = group, fill = log(GDPPerCapita))) + geom_polygon(color = "gray90", size = 0.25) + theme_map() + coord_map(projection = "lambert", lat0 = -50, lat1 = 50) + labs(fill = "GDP Per Capita") + coord_map(xlim=c(-180,180)) + ggtitle("Global GDP Per Capita")
+
+x2<- ggplot(map.dat, aes(long, lat, group = group, fill = log(PerCapitaPlasticWaste))) + geom_polygon(color = "gray90", size = 0.25) + theme_map() + coord_map(projection = "lambert", lat0 = -50, lat1 = 50) + labs(fill = "Per Cap waste") + coord_map(xlim=c(-180,180)) + ggtitle("Plastic Waste Per Capita)")
+
+x3 <- ggplot(map.dat, aes(long, lat, group = group, fill = log(PerCapitaMismanagedWaste))) + geom_polygon(color = "grey90", size = 0.25) + theme_map() + coord_map(projection = "lambert", lat0 = -50, lat1 = 50) + labs(fill = "Per Cap waste") + coord_map(xlim=c(-180,180)) + ggtitle("Mismanaged Waste Per Capita by Country") 
+```
+
+
+
+```{r}
+grid.arrange(x2, x3, ncol=2)
+```
+
+In the maps above, we first just wanted to show how GDP is spread throughout the world. The second side by side plots aim to show how the plastic waste is distributed and how this compares and changes in the map for mismanagement of waste. We can see that higher income countries produce more plastic waste and seem to have good methods for managing this plastic waste in comparison to lower income countries. There is also high waste mismanagement in Asia, which we attribute to disposal methods like those in the US, in which our plastic recycling was simply sent to China. This could, therefore, also account for the high mismanagement of waste in Asia. 
+
+
+### How does a country's population relate to mismanaged waste?
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(dat, aes(x = log(TotalPopulation), y = log(PerCapitaMismanagedWaste), size = GDPPerCapita)) + geom_point()+xlab("Total Population (log scale)") +ylab("Mismanaged Waste Per Capita (log scale)")+ggtitle("Association Between Total Population and Mismanaged Waste Per Capita")+theme_calc()
+```
+
+In the plot above, we aimed to show any relationship that could exist between population and per capita mismanaged waste, which would therefore show that population is significant after it has already been accounted for. This plot shows us that this relationship does not exist.
+
+### Mapping by Continents 
+```{r, echo=FALSE}
+for (c in unique(map.dat$Continent)) {
+  map.dat$aveGDPPerCapita[map.dat$Continent == c] <- mean(map.dat$GDPPerCapita[map.dat$Continent == c], na.rm = TRUE)
+}
+ggplot(map.dat, aes(long, lat, group = group, fill = log(aveGDPPerCapita))) + geom_polygon(color = "gray90", size = 0.25) + theme_map() + coord_map(projection = "lambert", lat0 = -50, lat1 = 50) + labs(fill = "Log Per Cap waste") + coord_map(xlim=c(-180,180)) + ggtitle("Average GDP per Capita per Continent")
+
+for (c in unique(map.dat$Continent)) {
+  map.dat$aveMismanagedWaste[map.dat$Continent == c] <- mean(map.dat$MismanagedWaste[map.dat$Continent == c], na.rm = TRUE)
+}
+ggplot(map.dat, aes(long, lat, group = group, fill = log(aveMismanagedWaste))) + geom_polygon(color = "gray90", size = 0.25) + theme_map() + coord_map(projection = "lambert", lat0 = -50, lat1 = 50) + labs(fill = "Log Per Cap waste") + coord_map(xlim=c(-180,180)) + ggtitle("Average Mismanaged Waste")
+
+for (c in unique(map.dat$Continent)) {
+  map.dat$avePerCapitaMismanagedWaste[map.dat$Continent == c] <- mean(map.dat$PerCapitaMismanagedWaste[map.dat$Continent == c], na.rm = TRUE)
+}
+ggplot(map.dat, aes(long, lat, group = group, fill = log(avePerCapitaMismanagedWaste))) + geom_polygon(color = "grey90", size = 0.25) + theme_map() + coord_map(projection = "lambert", lat0 = -50, lat1 = 50) + labs(fill = "Log Per Cap waste") + coord_map(xlim=c(-180,180)) + ggtitle("Average Mismanaged Waste Per Capita by Continent") 
+```
+
+With these models we wanted to show the continental effect on each variable: GDP, mismanaged waste and per capita mismanaged waste. We wanted to show this distribution to show the harsh differences that exist between continents, pushing it forward as a good predictor. 
+
+
+## Building Models:
+
+### The GAM Model
+
+A generalized additive model (GAM) is a generalized linear model. The GAM model is weighted by total population.
+
+```{r, message=FALSE, warning=FALSE}
+GAMModel <- glm(PerCapitaMismanagedWaste ~ log(GDPPerCapita)*CoastalPopulation, data = dat, family = "gaussian", weights = log(TotalPopulation))
+```
+
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
+aug.fit.gam <- augment(GAMModel)
+ggplot(aug.fit.gam, aes(x = log.GDPPerCapita., y = .fitted)) + geom_point()+xlab("GDP Per Capita (log scale)")+ylab("Fitted Values")+ ggtitle("GAM Model #1")+theme_calc()
+```
+
+```{r}
+gdp <- c(100, 10000, 50000, 100000, 125000)
+coastalPop <- c(1500, 50000000, 250000000)
+grid <- expand.grid(gdp, coastalPop)
+colnames(grid) <- c("GDPPerCapita", "CoastalPopulation")
+grid$preds = as.vector(predict(GAMModel, newdata = grid))
+
+ggplot(grid, aes(x = GDPPerCapita, y = preds)) + geom_line() + facet_grid(~CoastalPopulation, labeller = label_both) + ylab("Fitted Value") + xlab("GDP Per Capita")+theme_calc()
+
+ggplot(grid, aes(x = CoastalPopulation, y = preds, group = GDPPerCapita, color = GDPPerCapita)) + geom_line() + ylab("Fitted Value") + xlab("Coastal Population")+theme_calc()
+```
+
+```{r}
+ggplot(aug.fit.gam, aes(x = .fitted, y = .resid)) + geom_point() + geom_hline(yintercept = 0, color = "red") + geom_smooth(se=FALSE) + xlab("Fitted Value") + ylab("Residual")+theme_calc()+ggtitle("Fitted Values vs. Residual Values")
+```
+
+
+### The GAM Model with continents
+
+```{r}
+GAMModel1 <- glm(PerCapitaMismanagedWaste ~ log(GDPPerCapita)*Continent + pctCoast, data = dat, family = "gaussian", weights = log(TotalPopulation))
+```
+
+```{r}
+aug.fit.gam1 <- augment(GAMModel1)
+
+ggplot(aug.fit.gam1, aes(x = log.GDPPerCapita., y = .fitted)) + geom_point() + xlab("GDP Per Capita (log scale)") + ylab("Fitted Value")+theme_calc()+ggtitle("GDP Per Capita vs. Fitted Values")
+```
+
+```{r}
+ggplot(aug.fit.gam1, aes(x =.fitted, y =.resid)) + geom_point() + geom_hline(yintercept = 0, color = "red") + geom_smooth(se = FALSE) + xlab("Fitted Value") + ylab("Residual")+theme_calc()+ggtitle("Fitted Values vs. Residual Values")
+ggplot(aug.fit.gam1, aes(x =.fitted, y =.resid)) + geom_point() + geom_hline(yintercept = 0, color = "red") + geom_smooth(method = "lm", se=FALSE) + facet_wrap(~Continent) + xlab("Fitted Value") + ylab("Residual")+theme_calc()+ggtitle("Fitted Values vs. Residual Values by Continent")
+```
+
+```{r}
+gdp <- c(100, 10000, 50000, 100000, 125000)
+pct <- c(0, 0.5, 1)
+conts <- c("Africa", "Americas", "Oceania", "Europe", "Asia")
+grid1 <- expand.grid(gdp, pct, conts)
+colnames(grid1) <- c("GDPPerCapita", "pctCoast", "Continent")
+grid1$preds = as.vector(predict(GAMModel1, newdata = grid1))
+
+ggplot(grid1, aes(x = GDPPerCapita, y = preds, color = pctCoast, group = pctCoast)) + geom_line() + facet_wrap(~Continent, labeller = label_both) + ylab("Fitted Value") + xlab("GDP Per Capita")+theme_calc()+ggtitle("GDP Per Capita vs. Fitted Values by Continent")
+
+ggplot(grid1, aes(x = pctCoast, y = preds, group = GDPPerCapita, color = GDPPerCapita)) + geom_line() + facet_wrap(~Continent) + ylab("Fitted Value") + xlab("Percentage Coastal Population")+theme_calc()+ggtitle("Percentage Coastal Population vs. Fitted Values by Continent")
+```
+
+## Conclusion
+
+With our final model, we saw a good fit included GDP and its interaction with continents as well as the percent coastal population variable as an additive variable in the model. We then weighted this by total population. From the beginning, GDP was our main focus, understanding that a high GDP would mean a country with high industrialization and therefore high waste. Additionally, due to the differences in continents that we saw in our exploration, this should be added as an interaction term to provide an overall better explanation for the mismanagement of waste. Though it has its limits, we found that the percentage of coastal population variable was a meaningful predictor and should be included in the model. 
+
+We did have some shortcomings in terms of data, specifically that we were missing some countries and only had a few variables. It would be interesting to find data on the distance of coastline to replace the coastal population percentage. We also think finding data on the number of industries or including the Gini index as a predictor would add a lot to the model. 

@@ -1,0 +1,119 @@
+---
+title: "Sea Surface Temperatures"
+author: "Evan Tiffany"
+date: "4/1/2020"
+output: pdf_document
+---
+
+```{r}
+library(tidyr)
+library(stringr)
+library(zoo)
+library(tidyverse)
+library(TTR)
+
+sst.dat = read.csv('SST_est.csv')
+for (i in 1:780){
+  if (substr(sst.dat$DATE[i],1,2) %in% c("12","01", "02")){
+    sst.dat$SEASON[i] = "Winter"
+  } else {
+    if (substr(sst.dat$DATE[i],1,2) %in% c("03","04", "05")){
+      sst.dat$SEASON[i] = "Spring"
+    } else {
+      if (substr(sst.dat$DATE[i],1,2) %in% c("06","07", "08")){
+        sst.dat$SEASON[i] = "Summer"
+      } else {
+        if (substr(sst.dat$DATE[i],1,2) %in% c("09","10", "11")){
+          sst.dat$SEASON[i] = "Fall"
+        }
+      }
+    }
+  }
+}
+
+date <- str_split_fixed(sst.dat$DATE, "M", n = 2)
+dates = str_c(date[,2], date[,1])
+dates = as.yearmon(dates, "%Y%m")
+sst.dat$DATE <- dates
+year <- as.numeric(format(sst.dat$DATE, "%Y"))
+if(year < 2020){
+  sst.dat$DECADE[year < 2020] <- 2010 
+}
+if(year < 2010){
+  sst.dat$DECADE[year < 2010] <- 2000 
+} 
+if(year < 2000){
+  sst.dat$DECADE[year < 2000] <- 1990 
+} 
+if(year < 1990){
+  sst.dat$DECADE[year < 1990] <- 1980 
+} 
+if(year < 1980){
+  sst.dat$DECADE[year < 1980] <- 1970 
+} 
+if(year < 1970){
+  sst.dat$DECADE[year < 1970] <- 1960
+}
+if(year < 1960){
+  sst.dat$DECADE[year < 1960] <- 1950
+}
+
+```
+
+
+Examining Missing Data
+```{r}
+missing <- c()
+for (decade in unique(sst.dat$DECADE)) {
+  for (season in unique(sst.dat$SEASON)) {
+    sst <- sst.dat$SST[sst.dat$DECADE == decade & sst.dat$SEASON == season]
+    missing <- c(missing, sum(is.na(sst)))
+  }
+}
+  
+missing <- matrix(missing,ncol=4,byrow=TRUE)
+rownames(missing) <- unique(sst.dat$DECADE)
+colnames(missing) <- unique(sst.dat$SEASON)
+missing <- as.table(missing)
+missing <- cbind(missing, rowSums(missing))
+missing <- rbind(missing, colSums(missing))
+missing
+```
+
+
+```{r}
+ggplot(sst.dat, aes(as.numeric(format(sst.dat$DATE, "%m")), sst.dat$SST)) + geom_point() + facet_wrap(sst.dat$DECADE) + xlab("Month") + ylab("SST") + geom_smooth(se=F)
+
+sst.dat$YEAR <- year
+sst.dat$MON <- as.numeric(format(sst.dat$DATE, "%m"))
+sst.dat$SST2 <- na.approx(sst.dat$SST) #interpolate NAs
+ggplot(sst.dat, aes(x = MON, y = SST2, group = YEAR, color = YEAR)) + geom_line(na.rm = T) + scale_color_gradient(low = "red", high = "yellow")
+plot.ts(sst.dat$SST2)
+
+mat <- c()
+for (decade in unique(sst.dat$DECADE)) {
+  for (season in unique(sst.dat$SEASON)) {
+    sst <- sst.dat$SST[sst.dat$DECADE == decade & sst.dat$SEASON == season]
+    mat <- c(mat, mean(sst, na.rm = TRUE))
+  }
+}
+mat <- matrix(mat,ncol=4,byrow=TRUE)
+rownames(mat) <- unique(sst.dat$DECADE)
+colnames(mat) <- unique(sst.dat$SEASON)
+heatmap(mat, Rowv=NA, Colv=NA, xlab = "Season", ylab = "Average SST", col = cm.colors(256))
+```
+
+```{r}
+series <- ts(sst.dat$SST2, frequency = 12)
+series.SMA <- SMA(series, n=4)
+plot.ts(series.SMA)
+components <- decompose(series)
+plot(components)
+adjusted <- series-components$random #adjusted time series
+plot(adjusted)
+```
+
+```{r}
+forecasts <- HoltWinters(series, beta = F, gamma = F)
+```
+
