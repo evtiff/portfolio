@@ -1,0 +1,534 @@
+---
+title: "Sea Surface Temperatures"
+subtitle: "An Application of Time Series Methods and Integration of Fuctional Modeling"
+author: "Ann Marie Matheny, Amanda Suleski, Evan Tiffany"
+date: "4/1/2020"
+output: pdf_document
+---
+
+## Abstract
+*...can fill this in last...*
+
+## Division of Labor
+*...can fill this in last...*
+
+\newpage
+
+## Introduction
+
+The purpose of this report is to inform readers on our team's collaborative efforts in examining sea surface temperatures (SST). The objective of this project was to explore modern methologies in dealing with missing data as well as forcasting techniques. Overall, we analyzed the performace of three statistical models; a benchmark model, a tradiational time series model, and a functional model. We graded each models performance based on minimized variance in the residuals it produced. Before these steps could even be taken however, our team worked together to address the initial problem of missing data. Many avenues were explored on how to handle this obstacle. Since we are working with climatological data that produces a seasonal trend, we concluded that interpolation was the appropriate choice. We at first receuved only a portion of the data to train our models and then the full data set to then test how well our models performed. This report consisely documents our thought process and statistical procedures. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(tidyr)
+library(stringr)
+library(zoo)
+library(tidyverse)
+library(TTR)
+library(imputeTS)
+library(viridis)
+library(TSA)
+library(kableExtra)
+library(tseries)
+library(forecast)
+```
+
+```{r echo=FALSE}
+sst.dat = read.csv('SST_est.csv')
+for (i in 1:780){
+  if (substr(sst.dat$DATE[i],1,2) %in% c("12","01", "02")){
+    sst.dat$SEASON[i] = "Winter"
+  } else {
+    if (substr(sst.dat$DATE[i],1,2) %in% c("03","04", "05")){
+      sst.dat$SEASON[i] = "Spring"
+    } else {
+      if (substr(sst.dat$DATE[i],1,2) %in% c("06","07", "08")){
+        sst.dat$SEASON[i] = "Summer"
+      } else {
+        if (substr(sst.dat$DATE[i],1,2) %in% c("09","10", "11")){
+          sst.dat$SEASON[i] = "Fall"
+        }
+      }
+    }
+  }
+}
+
+date <- str_split_fixed(sst.dat$DATE, "M", n = 2)
+dates = str_c(date[,2], date[,1])
+dates = as.yearmon(dates, "%Y%m")
+sst.dat$DATE <- dates
+year <- as.numeric(format(sst.dat$DATE, "%Y"))
+if(year < 2020){
+  sst.dat$DECADE[year < 2020] <- 2010 
+}
+if(year < 2010){
+  sst.dat$DECADE[year < 2010] <- 2000 
+} 
+if(year < 2000){
+  sst.dat$DECADE[year < 2000] <- 1990 
+} 
+if(year < 1990){
+  sst.dat$DECADE[year < 1990] <- 1980 
+} 
+if(year < 1980){
+  sst.dat$DECADE[year < 1980] <- 1970 
+} 
+if(year < 1970){
+  sst.dat$DECADE[year < 1970] <- 1960
+}
+if(year < 1960){
+  sst.dat$DECADE[year < 1960] <- 1950
+}
+sst.dat$YEAR <- year
+sst.dat$MON <- as.numeric(format(sst.dat$DATE, "%m"))
+```
+
+## The Data
+
+The data used in this analysis was  provided by the National Oceanic and Atmospheric Agency (NOAA) and was believd to be measured within the region of the south Pacific. The data received at first consisted simply of two variables; a date variable (month, year) and a monthly average sea surface temperature given in degrees Celcius. The first record was taken in January 1950 and the data spans to December of 2014. It includes 780 observations. However, 137 of these observations were missing the sea surface temperature for a given time stamp. As we delved into our assignment and our analysis structure matured we later received the complete data set which contained all data points. This new data was applied to our 3 modeling techniques.
+
+### Examining Missing Data
+
+After researching different missing data techniques applied in time series and consulting our project advisor, we concluded that seasonal interplation was the most applicable and appropriate for this data sense given the cyclical and seasonal nature of the series data. 
+
+We also took several steps in cleaning, wrangling and preparing the data in order to run any sort of preliminary analysis. First, we created a season variable (winter, spring, summer, fall) to look at any seasonal trends that appeared relevant in the data over time. We also created a decade variable to indicate what decade each monthly avergae was recorded in to compare any trends in the data across the different decades. We repeated this same procedure for creating a separate month and year varibale (this is apart from the month-year variable provided). 
+
+```{r echo=FALSE, fig.align='center'}
+missing <- c()
+for (decade in unique(sst.dat$DECADE)) {
+  for (season in unique(sst.dat$SEASON)) {
+    sst <- sst.dat$SST[sst.dat$DECADE == decade & sst.dat$SEASON == season]
+    missing <- c(missing, sum(is.na(sst)))
+  }
+}
+  
+missing <- matrix(missing,ncol=4,byrow=TRUE)
+rownames(missing) <- unique(sst.dat$DECADE)
+colnames(missing) <- unique(sst.dat$SEASON)
+missing <- as.table(missing)
+missing <- cbind(missing, rowSums(missing))
+missing <- rbind(missing, colSums(missing))
+knitr::kable(missing, caption = "Missing Data") %>% kable_styling(position = "center")
+```
+
+### Missing Data Interpolations
+
+We had 3 basic approaches for the data interpolation: using the original data, a linear interpoliation, and a cubic spline interpolation. The nonparametric approach was the most appropriate; a cubic spline is a spline constructed of piecewise third-order polynomials which pass through a set of $m$ control points (it should be mentioned that natural cubic spline interpolation does have a tendency of overfitting). (WE NEED TO CITE THIS!!) This method produced minimal variance an was added as a new numeric varibale to the SST data as an interpolation metric. The linear approach did not perform as well, mostly due to the fact that the data violates linearity.
+
+
+##### Original Data
+
+The variance in the original data is 1.582. We calculated the mean and standard deviation of the sea surface temperatures of all years per month in order to further examine the data.
+
+```{r echo=FALSE}
+monDat <- function(dat){
+  tbl <- c()
+  for (m in unique(sst.dat$MON)) {
+    tbl <- c(tbl, mean(dat[sst.dat$MON == m], na.rm = T), var(dat[sst.dat$MON == m], na.rm = T))
+  }
+  tbl <- matrix(tbl, ncol=2, byrow=TRUE)
+  rownames(tbl) <- c("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sep", "Oct", "Nov", "Dec")
+  colnames(tbl) <- c("Mean", "SD")
+  tbl <- as.table(tbl)
+  knitr::kable(tbl) %>% kable_styling(position = "center")
+}
+
+# orig data
+summary(sst.dat$SST)
+orig.var <- var(sst.dat$SST, na.rm = T)
+monDat(sst.dat$SST)
+```
+
+##### Linear Interpolation
+
+The variance after the linear interpolation is slightly lower than the variance of the original data at 1.542. This interpolation keeps the quartiles approximately the same as the original data. While the mean sea surface temperature per month remains approximately the same as the original data, the standard deviation increased for each month.
+
+```{r echo=FALSE}
+# linear interpolation
+linear <- na.approx(sst.dat$SST)
+#summary(linear)
+lin.var <- var(linear)
+monDat(linear)
+```
+
+##### Cubic Spline Interpolation
+
+The variance after the cubic spline interpolation is larger than the variance of the original data at 1.605. The quartiles are just barely lower than the original data. The standard deviation of sea surface temperatures per month is larger than the original data. The standard deviation is slightly larger than the linear interpolation in the winter months and about the same in the summer months.
+
+```{r echo=FALSE}
+# cubic spline interpolation
+sp <- na.spline(sst.dat$SST)
+#summary(sp)
+sp.var <- var(sp)
+monDat(sp)
+
+sst.dat$interp <- sp
+```
+
+## Analysis of Missing Data Interpolations
+
+### Squared Error
+
+As explained above, the cubic spline interpolation should yield the best results since the data is not linear. Once we received the complete data set, we analyzed the accuracy of our interpolations. The mean squared errors of our linear interpolation and cubic spline interpolation is 0.0254 and 0.0144 respectively. Thus confirming our expectations that the cubic spline interpolation is more accurate.
+
+```{r echo=FALSE}
+all.dat <- read.csv("SST_uni.csv")
+all.dat <- all.dat[,2:4]
+colnames(all.dat) <- c("YEAR", "MONTH", "SST")
+all.dat <- all.dat[0:841,]
+
+for (i in 1:841){
+  if (all.dat$MONTH[i] %in% c(12,1, 2)){
+    all.dat$SEASON[i] = "Winter"
+  } else {
+    if (all.dat$MONTH[i] %in% c(3,4, 5)){
+      all.dat$SEASON[i] = "Spring"
+    } else {
+      if (all.dat$MONTH[i] %in% c(6,7, 8)){
+        all.dat$SEASON[i] = "Summer"
+      } else {
+        if (all.dat$MONTH[i] %in% c(9,10, 11)){
+          all.dat$SEASON[i] = "Fall"
+        }
+      }
+    }
+  }
+}
+for (i in 1:841){
+  if (all.dat$MONTH[i] %in% c(1,2,3,4,5,6,7,8,9)){
+    all.dat$DATE[i] = paste(toString(all.dat$YEAR[i]), '0', toString(all.dat$MONTH[i]), sep = "")
+  } else {
+    all.dat$DATE[i] = paste(toString(all.dat$YEAR[i]), toString(all.dat$MONTH[i]), sep = "")
+  }
+}
+all.dat$DATE <- as.yearmon(all.dat$DATE, "%Y%m")
+
+# linear interpolation
+lin.err <- mean((all.dat$SST[1:780] - linear)^2)
+
+# cubic spline interpolation
+sp.err <- mean((all.dat$SST[1:780]-sp)^2)
+```
+
+
+## Preliminary Exploratory Data Analysis
+
+As previously stated, our team wanted to explore seasonal and time trends that may or may not have been present in the data once all wrangling and cleaning was complete. 
+
+```{r fig.align='center', fig.show = 'hold', fig.width=5, fig.height=4}
+# DECADE MONTHLY AVERAGE PLOT
+ggplot(sst.dat, aes(as.numeric(format(sst.dat$DATE, "%m")), sst.dat$SST)) + 
+  geom_point() + 
+  facet_wrap(sst.dat$DECADE) + 
+  xlab("Month") + ylab("SST") +
+  labs(x = "Month", y = "Temperature (C)", title = "\n\nMonthly Average SST Across Decades") + 
+  theme_light() +
+  theme(plot.title = element_text(size = 10)) + 
+  theme(legend.position = "bottom") + 
+  theme(axis.title.x = element_text(size=10), axis.title.y = element_text(size = 10)) 
+```
+
+This first plot breaks up the overall times series across the 7 decades. The most inconsistent decacde is 1980, where we see high averages in comparison to the other deacdes as well as a wider, more variant monthly averages. Likewise the 1990 plot also has notably higher SST, especailly whne coming the decade that follows. We see much less varaition in the later decaded of the SST, which could be due to confounding factors such as climate change, but that is beyond the scope of this report. 
+
+```{r fig.align='center', fig.show = 'hold', fig.width=5, fig.height=5}
+# DECADE MONTHLY AVERAGE PLOT -- W/ SEASON
+ggplot(sst.dat, aes(as.numeric(format(sst.dat$DATE, "%m")), SST, color = sst.dat$SEASON)) + 
+  geom_point() + 
+  facet_wrap(sst.dat$DECADE) + 
+  labs(x = "Month", y = "Temperature (C)", title = "\n\nMonthly Average SST Across Decades", color = "Season") + 
+  theme_light() +
+  theme(plot.title = element_text(size = 10)) + 
+  theme(legend.position = "bottom") + 
+  theme(axis.title.x = element_text(size=10), axis.title.y = element_text(size = 10))
+```
+
+This graph presents the same inforamtion as the previous one, but this time we added a color aesthetic to indicate the four seasons. 
+
+```{r fig.align='center', fig.show = 'hold', fig.width=5, fig.height=4}
+ggplot(sst.dat, aes(x = MON, y = interp, group = YEAR, color = YEAR)) + 
+  geom_line(na.rm = T) +
+  labs(x = "Month", y = "Temperature (C)", title = "\n\nRaw Data (Interpolation)", color = "Year") + 
+  theme(plot.title = element_text(size = 10)) + 
+  theme(axis.title.x = element_text(size=10), axis.title.y = element_text(size = 10)) +
+  theme_light()
+```
+
+These two graphics show the flucuate of SST over time. The first plot (pictured above) shows the time series of the cubic spline interpolation over time, month 0 being the first data point month (January 1950). This second one (pictured below) is a cluster of lines, each on indicating a different year as a fucntion of time. The 65-year lines are all plotted against each other and an overall sinusoidal pattern is evident. 
+
+
+```{r echo=FALSE, warning=FALSE, fig.align='center', fig.show = 'hold', fig.width=5, fig.height=3}
+sst.dat$YEAR <- year
+sst.dat$MON <- as.numeric(format(sst.dat$DATE, "%m"))
+
+plot.ts(sst.dat$interp, ylab = "Temperature", main = "\n\nRaw Data Series")
+```
+
+
+```{r echo=FALSE, fig.align='center', fig.show = 'hold', fig.width=5, fig.height=3}
+# time series -- ad to adjust windom size to see whole series
+#plot(sst.dat$interp~sst.dat$DATE)
+ts <- ts(sst.dat$interp, start = sst.dat$DATE[1], freq =12)
+#plot(ts, ylab = "Temperature")
+boxplot(ts~sst.dat$DECADE, ylab = "Temperature", xlab = "Decade")
+boxplot(ts~sst.dat$SEASON, ylab = "Temperature", xlab = "Season")
+# some summary statistics
+#start(ts)
+#end(ts)
+#summary(ts)
+```
+
+These boxplots were constructed to again visualize the temperature distributions across the seasons and decades parameters. In the first plot illustrating the decade data, it is interesting that the medians are constistant and constant over the 60 or so year time span, apart from what one might have hypothesized with rising sea temperatures due to global warming. In the second box plot figure, it is esay to see that spring overall has the warmest sea surface temperatures, and given that this data was collected in the southern hemisphere, this is to be expected. Interestingly, there seems to be little differnce in the temperature distribution between the summer and winter months; they are practically identical. 
+
+## Differencing the Data
+
+Time series datasets may contain trends and seasonality, which may need to be removed prior to modeling. Trends can result in a varying mean over time, whereas seasonality can result in a changing variance over time, both which define a time series as being non-stationary. Stationary datasets are those that have a stable mean and variance, and are in turn much easier to model. Differencing is a widely used data transform for making time series data stationary. For example, when modeling, there are assumptions that the summary statistics of observations are consistent. In time series terminology, we refer to this expectation as the time series being stationary. These assumptions can be easily violated in time series by the addition of a trend, seasonality, and other time-dependent structures. The observations in a stationary time series are not dependent on time. Our team checked if our time series is stationary by looking at a line plot of the series over time. Sign of obvious trends, seasonality, or other systematic structures in the series are indicators of a non-stationary series. A more accurate method would be to use a statistical test, such as the Dickey-Fuller test, which we performed on our data using the `adf.test()` R function. It determines whether a unit root, a feature that can cause issues in statistical inference, is present in a time-series sample. The main idea is the bigger the negative value, the stronger the confiramtion of stationarity. In our results, we have a test statistic of -5.128 and a small p-value of 0.01 indicating significance. 
+
+One of the time series models we hoped to examie was the Auto-Regressive (AR) Moving Average (MA) model and in particular the ARIMA (p,d,q) model. In order to construct this we needed to determine the parts of the model notion by calculating the autocorrelation and partial autocorrelation. These results are displayed in what are called correlgrams, which indicate how the data is related to itself over time based on the number of periods apart, or lags. The autocorrelation function (ACF) displays the correlation between series and lags for the Moving Average (q) of the ARIMA model, and the partial autocorrelation function (PACF) displays the correlation between returns and lags for the auto-regression (p) of the ARIMA model.
+
+In order to carry out these statistical procedure, we decomposed the time series and ran an ACF  and PACF on the series' seasonal components. We also differenced the original time series (with a time lag of 12 for each month) and ran the data throught the same functions.
+
+```{r echo=FALSE, fig.align='center', fig.show = 'hold', fig.width=5, fig.height=3}
+series <- ts(sst.dat$interp, frequency = 12)
+series.SMA <- SMA(series, n=4) # MA
+## Dikcey Fuller test for stationarity
+adf.test(series) # AR 
+plot.ts(series.SMA, main = "Sea Surface Tempurature Moving Averages", ylab = "Moving Average")
+
+components <- decompose(series)
+plot(components)
+adjusted <- series-components$seasonal
+plot(adjusted, main = "Seasonal Difference", ylab = "Tempurature")
+```
+
+```{r fig.align='center', fig.show = 'hold', fig.height=4}
+## acfs and pacfs all together in one chunk
+par(mfrow = c(1,2))
+
+acf(series)
+pacf(series)
+
+acf(adjusted)
+pacf(adjusted)
+
+diff.series <- diff(series, lag = 12)
+diff.diff.series <- diff(diff.series, lag = 12)
+diff.adjusted <- diff(adjusted)
+
+acf(diff.series, lag = 12)
+pacf(diff.series, lag = 12)
+
+acf(diff.diff.series, lag = 12)
+pacf(diff.diff.series, lag = 12)
+
+acf(diff.adjusted)
+pacf(diff.adjusted)
+```
+
+The blue-dotted line determines the strength of correlations. The values that cross the blue-dotted lines determine the notation for the ARIMA model for each dataset.
+
+***
+
+
+## Modeling Process
+
+### A Random Walk, Linear Model
+
+The first model we included in our analysis was a benchmark model to gauge as a criterion before continuing with our analysis. The first one we chose to look into was a Random Walk (RW) model. A random walk can be expressed by the following:
+
+\[x_t = x_{t-1} + \omega_t\]
+
+The time series is purely predicted as a stochastic model with time dependency based entirely on the previous time point $t-1$. Note that a random walk time series is not stationary (as the AR polynomial root is not greater than 1). Applying first differencing would result in a white noise time series (which would be *stationary*), and would have minimal autocorrelation. 
+
+\[\triangledown x_t = x_t - x_{t-1} = \omega_t\]
+
+Since we are in particular working with cyclical data a seasonal random walk is more appropriate to apply. If the seasonal difference (the season-to-season change) of a time series looks like stationary noise, this suggests that the mean (constant) forecasting model should be applied to the seasonal difference. For monthly data, whose seasonal period is 12, the seasonal difference at period $t$ is $X(t)-X(t-12)$. Applying the mean model to this series yields the equation:
+
+\[X(t) - X(t-12) = \alpha\]
+
+This forecasting model will be called the seasonal random walk model, because it assumes that each season's values form an independent random walk. Thus, the model assumes that January's temperature for 2020 is a random step away from January's temperature for 2019, February's tempeature for 2020 is a random step away from February's temperature for 2019, etc., and the mean temperature of every step is equal to the same constant (denoted here as alpha). The forecast for Jan 2020 ignores all data after Jan 2019; it is based entirely on what happened exactly one year ago.
+
+The second benchmark model we briefly looked into was a linear model. As shown by the plots below, the linear model does not fit the data well. Instead of a seasonal pattern, this forecast is constantly slightly increasing. There is a very wide range of residuals from -3 to 3; however, the plot also shows the homogeneity of error variance.
+
+```{r include = FALSE}
+sst.dat <- all.dat[1:780,]
+fore.dat <- all.dat[781:841,]
+series <- ts(sst.dat$SST, frequency = 12)
+#ARIMA(0,1,0) -- Augoregressive part, p = 0, Integration, d = 1, Moving average part, q = 0
+RW <- arima.sim(model= list(order = c(0, 1, 0)), n=780)
+plot.ts(RW, main="Random Walk", col=4)
+# differencing RW
+RW_diff <- diff(RW)
+plot.ts(RW_diff,main="Random Walk", col=4)
+```
+
+```{r echo=FALSE, fig.align='center', fig.show = 'hold', fig.width=5, fig.height=3}
+# lm model
+lm.mod <- lm(SST ~ as.numeric(DATE), data = sst.dat)
+
+ggplot(data = sst.dat, aes(x = as.numeric(DATE), y = SST)) + 
+  geom_line() + geom_smooth(method = "lm", se = F) + 
+  ggtitle("Linear Model") + xlab("Date") + ylab("Temperature")
+
+plot(lm.mod$fitted, lm.mod$residuals, xlab = "Temperature", ylab = "Residuals") + abline(0,0)
+summary(lm.mod)
+```
+
+### Linear Model Analysis
+
+The mean squared error of the linear model forecast is 2.065. The plot below shows the linear model forecast (blue line) and the actual sea surface temperature values as points.
+
+```{r echo=FALSE, fig.align='center', fig.show = 'hold', fig.width=5, fig.height=3}
+pred <- predict(lm.mod, newdata = fore.dat)
+
+ggplot(data = fore.dat, aes(x = DATE, y = SST)) + 
+  geom_point() + geom_line(aes(x = DATE, y = pred), col = "blue") + 
+  ylab("Temperature") + ggtitle("Linear Model Forecast")
+
+lin.mse <- mean((pred - fore.dat$SST)^2)
+```
+
+### The Holt-Winters Model
+
+The second type of modeling we explored was a traditional time series model. For this, we decided the Holt-Winters Forecast was most applicable to our data. Holt (1957) and Winters (1960) extended Holt’s method to capture seasonality. The Holt-Winters seasonal method comprises the forecast equation and three smoothing equations — one for the level $l_t$,trend $b_t$, a seasonal component $s_t$, and corresponding smoothing paramters $\alpha$, $\beta$, and $\gamma$ and $m$ is used to denote seasonality. There are two variations to this model, the additive and multiplicative methods. The additive method is favored when the seasonal variations are roughly constant through the time series. The multiplicative method is favored when the seasonal variations are changing proportional to the level of the series. For the purposes of this analysis we used both modeling methods, but forecasted the time series using the additive method. While there did not appear to be a significant difference between the two fits, the additive was deemed more appropriate since we are working with seasonal data which typically has little variation. The sum of squared error for the additive model is 99.797 compared to the multiplicative model which is 102.742.
+
+```{r fig.align='center', fig.show = 'hold', fig.width=5, fig.height=3}
+fit1 <- HoltWinters(series, seasonal = "additive", beta = F)
+f1.sse <- fit1$SSE
+plot(fit1, main = "Holt-Winters Filtering (Additive)")
+
+fit2 <- HoltWinters(series, seasonal = "multiplicative", beta = F)
+f2.sse <- fit2$SSE
+plot(fit2, main = "Holt-Winters Filtering (Multiplicative)")
+```
+
+### Holt-Winters Analysis
+
+Using the additive model we forecasted the sea surface temperature for the next 5 years. The plots below show the forecasted temperatures. The second plot compares the Holt-Winters forecast (blue) to the actual sea surface temperature (red). The mean squared error of the forecast is 1.066.
+
+Prediction intervals??
+https://www.sciencedirect.com/science/article/abs/pii/016920709090103I 
+
+```{r echo=FALSE, fig.align='center', fig.show = 'hold', fig.width=5, fig.height=3}
+fc <- predict(fit1, n.ahead = 61, prediction.interval = F)
+plot(forecast(fit1, 61), main = "Holt-Winters Forecast (Additive)")
+
+hol.mse <- mean((as.numeric(fc) - all.dat$SST[781:841])^2)
+
+ggplot() + geom_line(aes(x = 1:61, y = as.numeric(fc)), col = "blue") + geom_line(aes(x = 1:61, y = all.dat$SST[781:841]), col = "red") + xlab("Date") + ylab("Temperature")
+```
+
+### Functional Model
+
+The last model we explored was a Functional Model. For the functional model, we considered the data as representing a time series of curves, particularly, sinusodal curves, as expected from seasonal, cyclical flucuations. We can use this information to specify that for each year 1950-2020, there is a functional specification for the annual cycle. In particular the function we found to best fit the data is as follows (where $t$ denotes the temperature, $y$ is the year and $m$ indicates month)
+
+\[t_{ij} = y_i + sin(2\pi m_{ij})/(12 - 0.6) + cos(y_i * 10)\]
+
+
+```{r include=FALSE, fig.align='center', fig.show = 'hold', fig.width=5, fig.height=3}
+ggplot(sst.dat, aes(x = MONTH, y = SST, group = YEAR, color = YEAR)) +
+  geom_line(na.rm = T) +
+  labs(x = "Month", y= "Temperature (C)", title = "Preliminary Model", color = "Year") +
+  theme_light()
+```
+
+```{r fig.align='center', fig.show = 'hold'}
+k <- ggplot(all.dat, aes(x = YEAR, y = SST, group = MONTH, color = MONTH)) + 
+  geom_line(na.rm = T) +
+  labs(x = "Year", y= "Temperature (C)", title = "Functional model", color = "Month") +
+  theme_light() +
+  theme(legend.position = "bottom") +
+  theme(axis.title.x = element_text(size=8), axis.title.y = element_text(size = 8)) +
+  theme(plot.title = element_text(size = 10)) 
+
+kk <- ggplot(dplyr::filter(all.dat, YEAR < 1985), aes(x = YEAR, y = SST, group = MONTH, color = MONTH)) + 
+  geom_line(na.rm = T) +
+  labs(x = "Year", y= "Temperature (C)", title = "Functional Model (years after 1985)", color = "Month") +
+  theme_light() +
+  theme(legend.position = "bottom") +
+  theme(axis.title.x = element_text(size=8), axis.title.y = element_text(size = 8)) +
+  theme(plot.title = element_text(size = 10)) 
+
+gridExtra::grid.arrange(k, kk, ncol = 2)
+```
+
+The plots above aim to show the generic functional pattern of the data. We can see a sinusoidal function each year with the first plot, showing how the sea surface temperature changes monthly with a color change over years. The second and third plot aim to show the yearly pattern changes. The relationship in this case is much less obvious, but we can see generally the time between peaks and troughs to fit a sin relationship to the yearly component. 
+
+```{r fig.align='center', fig.show = 'hold'}
+# (fmod <- lm(dat = sst.dat, SST ~ YEAR + sin(2*pi*MONTH/12 - 0.25) + cos(YEAR)))
+# 
+# f <- ggplot(data = NULL, aes(x = sst.dat$MONTH, y = predict(fmod), group = sst.dat$YEAR, color = sst.dat$YEAR)) +
+#   geom_line(na.rm=T) + 
+#   geom_line(aes(x = sst.dat$MONTH, y = sst.dat$SST, group = sst.dat$YEAR, color = sst.dat$YEAR), alpha = 0.3) + 
+#   labs(x = "Month", y = "Temperature (C)", title = "Fitting the Model to the Data", color = "Year") + 
+#   theme_light() +
+#   theme(plot.title = element_text(size = 10)) + 
+#   theme(legend.position = "bottom") + 
+#   theme(axis.title.x = element_text(size=8), axis.title.y = element_text(size = 8)) 
+
+## kinda unnecessary to have two models i think the second fits it very well.
+
+(fmod2 <- lm(dat = sst.dat, SST ~ YEAR + sin(2*pi*MONTH/12 - 0.6) + cos(YEAR*10)))
+
+ff <- ggplot(data = NULL, aes(x = sst.dat$MONTH, y = predict(fmod2), group = sst.dat$YEAR, color = sst.dat$YEAR)) + 
+  geom_line(na.rm=T) + 
+  geom_line(aes(x = sst.dat$MONTH, y = sst.dat$SST, group = sst.dat$YEAR, color = sst.dat$YEAR), alpha = 0.3) + 
+  labs(x = "Month", y = "Temperature (C)", title = "Fitting the Model to the Data", color = "Year") + 
+  theme_light() +
+  theme(plot.title = element_text(size = 10)) + 
+  theme(legend.position = "bottom") + 
+  theme(axis.title.x = element_text(size=8), axis.title.y = element_text(size = 8)) 
+
+f <- ggplot(data = NULL, aes(x = sst.dat$YEAR, y = predict(fmod2), group = sst.dat$MONTH, color = sst.dat$MONTH)) + 
+  geom_line(na.rm=T) + 
+  geom_line(aes(x = sst.dat$YEAR, y = sst.dat$SST, group = sst.dat$MONTH, color = sst.dat$MONTH), alpha = 0.3) + 
+  labs(x = "Year", y = "Temperature (C)", title = "Fitting the Model to the Data", color = "Month") + 
+  theme_light() +
+  theme(plot.title = element_text(size = 10)) + 
+  theme(legend.position = "bottom") + 
+  theme(axis.title.x = element_text(size=8), axis.title.y = element_text(size = 8)) 
+  
+  
+gridExtra::grid.arrange(f, ff, ncol = 2)
+```
+
+```{r}
+pred2 <- predict(fmod2, newdata = fore.dat)
+
+ggplot(data = fore.dat, aes(x = DATE, y = SST)) + 
+  geom_point() + geom_line(aes(x = DATE, y = pred2), col = "blue") + 
+  ylab("Temperature") + ggtitle("Linear Model Forecast")
+
+fun.mse <- mean((pred2 - fore.dat$SST)^2)
+```
+
+
+```{r}
+par(mfrow = c(3,1))
+ts.plot(ts(fore.dat$SST), pred, lty = 1:2, main = "Linear")
+ts.plot(ts(fore.dat$SST), as.numeric(fc), lty = 1:2, main = "Holt-Winters")
+ts.plot(ts(fore.dat$SST), pred2, lty = 1:2, main = "Functional")
+```
+```{r}
+lin.ase <- sum(abs(pred - fore.dat$SST))
+hol.ase <- sum(abs(as.numeric(fc) - fore.dat$SST))
+fun.ase <- sum(abs(pred2 - fore.dat$SST))
+tab=data.frame(c(lin.mse, lin.ase), c(hol.mse, hol.ase), c(fun.mse, fun.ase), row.names = c('Mean Squared Error', 'Absolute Error'))
+colnames(tab) <- c("Linear", "Holt-Winters", "Functional")
+kable(tab) %>%
+  kable_styling(bootstrap_options = c("striped", "hoover"))
+```
+
+## Discussion and Conclusion
+
+*discuss pros and cons of each method, amount of effort that went in and was it worth it for marginal improvements*
+ 
+\newpage
+
+## Appendix 
+
+## Work Cited
+
+Holt, C. E. (1957). *Forecasting seasonals and trends by exponentially weighted averages* (O.N.R. Memorandum No. 52). Carnegie Institute of Technology, Pittsburgh USA.
+
+Winters, P. R. (1960). Forecasting sales by exponentially weighted moving averages. *Management Science*, 6, 324–342.
