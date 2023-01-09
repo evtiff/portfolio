@@ -14,13 +14,17 @@ Exploratory Data Analysis (R programming):
   statistical analysis and data mining. Applications to large data sets.
   
 Statistical Consulting (R programming):
-  Undergraduate class similar to capstone. Development of effective consulting skills, including the conduct of consulting sessions, collaborative problem
+  Undergraduate class similar to capstone at IU. Development of effective consulting skills, including the conduct of consulting sessions, collaborative problem
   solving, using professional resources, and preparing verbal and written reports. Interactions with clients will be coordinated by the Indiana Statistical
   Consulting Center.
   
 Econometrics (Python/Jupityr Notebook):
-  Undergraduate Economics class. Modern economic analysis is performed on computers. This course provides instruction in general basic programming and numerical
-  methods, both widely applicable across economic fields and in disciplines outside of economics.
+  Undergraduate Economics class taken at IU. Modern economic analysis is performed on computers. This course provides instruction in general basic programming
+  and numerical methods, both widely applicable across economic fields and in disciplines outside of economics.
+  
+Business Analytics with R (R programming):
+  Graduate class taken at Purdue. The project included utilizes R Shiny to create a working dashboard allowing for students currently job searching to find help
+  with resume readiness and job opportunity chances. 
   
 Industry Practicum:
   Capstone project for MS BAIM degree. Worked with Red Roof Inn on a detector for anomalies in reservations within a 48 hour window. Utilized python and R for 
