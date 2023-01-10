@@ -30,6 +30,10 @@ Industry Practicum:
   Capstone project for MS BAIM degree. Worked with Red Roof Inn on a detector for anomalies in reservations within a 48 hour window. Utilized python and R for 
   modeling (not included) and presented to the company with posters, papers, and presentations.
   
+Advanced Business Analytics (R):
+  This class was focused on using R to understand advanved analytical theory with applications in business. The project included utilized a provided dataset on 
+  cancer with conclusions to be made through the data.
+  
 IDOH Project Manager (SAS):
   Reports for weekly and monthly check-ins with the CDC to describe the survey sample, allowing for alterations to data collection to be made to retrieve an
   unbiased and representative sample. 
