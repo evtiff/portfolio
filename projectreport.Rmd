@@ -1,0 +1,395 @@
+---
+title: "Final Report"
+author: "Evan Tiffany, Xindi Lu"
+date: " December 9, 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+####Changing from Rouge Draft:
+* Format introduction in paragraph form
+* Have a methods section, which includes a description of the data and any cleaning/processing performed
+* Separate your analysis by diagnosis group
+* Report your final model for each diagnosis group and explain how you arrived at that model.
+* Conclusions section should focus on the motor-social relationship estimated in the mABC coefficient(s) in your final models, and comparing this relationship across diagnosis groups
+*removing vist=2
+
+
+#Introduction
+
+ With the development of the whole world and the society, more and more people start caring or pay more attention on children's issues, not only on children's physical health but also their mental disorders, such as developmental disorders. From what scientist definition, Developmental disorders comprise a group of psychiatric conditions originating in childhood that involve serious impairment in different areas.  These disorders include language disorders, learning disorders, motor disorders, autism spectrum disorders (ASD), and attention-deficit/hyperactivity disorder (ADHD).
+ 
+  Two of the most common mental disorder that appear in the childhood are ADHD and ASD. The ADHD is marked by inattention, hyperactivity, and impulsivity, which children cannot control their impulse. It is a very common disorder, that every year more than 3 million cases happened in US.  Until today, according to The American Psychiatric Association says that 5 percent of American Children have ADHD, and the average of ADHD diagnosis is 7, meanwhile age 3 to 6 is a period that ADHD typically first appears.  Not only age will affect on ADHD's symptom, but also the gender. In a 2004 survey of perceived gender differences in attention deficit disorder, 82 percent of teachers believed that attention deficit disorder is more prevalent in boys.  Except Age and Gender, another fact may influence children's ADHD, most people may not discover, is intelligence. According to the common wisdom used to be that if you have ADHD, you're not smart, and if you are smart, you can't have ADHD.
+
+  At the meantime, ASD it is marked by problems with social interactions, communication, and stereotyped behaviors. According to the ADDM Network, until 2014, 1 in 59 children who has ASD disorder.   Many children show symptoms of autism by 12 months to 18 months of age or earlier.   At same time, the population of Male which has ASD is much bigger than the population of Female. According to the current study in 2014, a U.S. study found that almost half of the children with ASD had average or above average intelligence, that is, an IQ score above 85. Less than a third of the children with autism had intellectual disability, and 23% had IQ scores in the "borderline range" from 71 to 85.  This indicates children with ASD may have a higher IQ in general. 
+
+  According to the studies and researches above, we sought to Gender, Age, Intelligence and Motor skills, which ones have influence on Children's social deficits. It was hypothesized that Gender, Age, Intelligence and Motor skills all effect on children's social deficits.
+
+
+
+
+#Method
+
+###Participants
+
+  There are total 1062 observations at the beginning, age 8-15. We mainly use three datasets. The first is children's motor skills. This dataset includes: mabc_totalstanderscore which is the total score of every participant's motor skills. And three components of total score, AimingandCatching, ManualDexterity and Balance. The second dataset is social deficits. This dataset includes: age of the children, the version of the test and the srs totalstanderscore. The third dataset is WISC which is mainly about the intelligence. We combine all versions' grade of the test together to convert them into a same scale of grade. Then, we eliminate all the N/A from these datasets and the vists=2 which can avoid violating the assumption of indeendent residuaks, there are 640 observations eventually.  There are 225 children with ADHD(mean age= 9.650033, SD= 1.142122; mean Intelligence= 73.95111, SD= 18.31428, 66 girl), ASD (mean age= 10.242983, SD= 1.390036; mean Intelligence= 81.17778, SD= 23.15518; 22 girl), TD (mean age= 10.188444, SD= 1.235271; mean Intelligence= 69.02143, SD= 15.32911; 75 girl).
+  
+We firstly separate all the observation into three groups by Primary Diagnosis which are ADHD, Autism and None. For the first group ADHD, we decided to look up potential predictors which are age, intelligence, gender, ADHD subtype, and secondary diagnosis. What we will include to the final model is to look up the p-value for every potential predictor. The big p-value can reject null hypothesis, which tells us not take into account.  The second group Autism is a little easier than ADHD group. We also need to test all the potential predictors which are same with ADHD group, except ADHD subtype. Then, same method for Autism to choose the predictors into final model.  The third group is None, which we use the same method as Autism to the final model. For the final model what we for the formula is lm function that we take y and x. x is the predictor, could be one or more, it will be determined by our previous step.  
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE,message=FALSE, echo=FALSE}
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(car)
+
+data_mabc <- read.table("KKI_movementAssessmentBatteryforChildren.csv", header = TRUE, sep = ",")
+
+data_dem <- read.table("KKI_demographicInfo.csv", header = TRUE, sep = ",")
+
+data_hand <- read.table("KKI_handedness.csv", header = TRUE, sep = ",")
+
+data_soc <- read.table("KKI_SocialResponsivenessScaleQuestionnaire.csv", header = TRUE, sep = ",")
+
+data_wisc <- read.table("KKI_WechslerIntelligenceScaleforChildren.csv", header = TRUE, sep = ",")
+
+wisclook4 <- read.table("wisc4GAI_lookup.csv", header = TRUE, sep = ",")
+
+wisclook5 <- read.table("wisc5GAI_lookup.csv", header = TRUE, sep = ",")
+
+wisclook5$source <- NULL
+
+## FUll Join used to combine tables to easily make plots etc.
+
+data_plot <- full_join(data_mabc, data_soc, by = "ï..ID") %>% filter(!(is.na(SRS_VERSION)))
+data_plot <- full_join(data_plot, data_dem, by = "ï..ID")
+
+dat.tot <- full_join(data_plot, data_wisc, by = "ï..ID")
+dat.tot4 <- dat.tot %>% filter(WISC_VERSION == 4)
+dat.tot5 <- dat.tot%>% filter(WISC_VERSION == 5)
+
+dat.tot4 <- dat.tot4 %>% mutate(WISC4.ScaledSum = WISC4_BlockDesign + WISC4_Information + WISC4_MatrixReasoning + WISC4_PictureConcepts + WISC4_Similarities + WISC4_Vocabulary)
+
+dat4 <- inner_join(dat.tot4, wisclook4)
+names(dat4)[names(dat4) == "WISC4.GAI"] <- "WISC.GAI"
+dat4 <-select(dat4, -"WISC4.ScaledSum")
+
+dat.tot5 <- dat.tot5 %>% mutate(WISC5.ScaledSum = WISC5_BlockDesign + WISC5_FigureWeights + WISC5_MatrixReasoning + WISC5_Similarities + WISC5_Vocabulary)
+
+dat5 <- inner_join(dat.tot5, wisclook5)
+names(dat5)[names(dat5) == "WISC5.GAI"] <- "WISC.GAI"
+dat5 <- select(dat5, -"WISC5.ScaledSum")
+
+dt1 <- rbind(dat4, dat5)
+
+dt <- rbind(dat4, dat5) %>% filter(!(is.na(mABC_TotalStandardScore)), !(is.na(SRS_TotalRawScore)),visit == 1, !(is.na(SecondaryDiagnosis)), !(is.na(mABC_AimingAndCatching.Component.StandardScore)), !(is.na(WISC.GAI)), mABC_AGE < 15)
+
+dt.adhd <- filter(dt, PrimaryDiagnosis == "ADHD")
+dt.aut <- filter(dt, PrimaryDiagnosis == "Autism", !(is.na(SecondaryDiagnosis)))
+dt.none <- filter(dt, PrimaryDiagnosis == "None")
+
+if (dt.adhd$CurrentlyNotTakingMeds == TRUE) {
+  dt.adhd$Meds = "None"
+} else {
+  if (dt.adhd$CurrentlyTakingAtomoxetine == TRUE) {
+    dt.adhd$Meds = "Atomoxetine"
+  } else {
+    if (dt.adhd$CurrentlyTakingClonidine == TRUE) {
+      dt.adhd$Meds = "Clonidine"
+    } else {
+      dt.adhd$Meds = "Other"
+    }
+  }
+}
+```
+
+###Tabel 1
+```{r, message=FALSE,echo=FALSE}
+#gender
+GenderM.adhd<- dt %>% filter(Gender=="M", PrimaryDiagnosis=="ADHD")
+am<-count(GenderM.adhd)
+GenderF.adhd<- dt %>% filter(Gender=="F",PrimaryDiagnosis=="ADHD")
+af<-count(GenderF.adhd)
+GenderM.asd<- dt %>% filter(Gender=="M", PrimaryDiagnosis=="Autism")
+dm<-count(GenderM.asd)
+GenderF.asd<- dt %>% filter(Gender=="F",PrimaryDiagnosis=="Autism")
+df<-count(GenderF.asd)
+GenderM.none<- dt %>% filter(Gender=="M",PrimaryDiagnosis=="None")
+nm<-count(GenderM.none)
+GenderF.none<- dt %>% filter(Gender=="F",PrimaryDiagnosis=="None")
+nf<-count(GenderF.none)
+
+#age
+age.adhd<-dt%>% select(SRS_AGE,PrimaryDiagnosis)%>% filter(PrimaryDiagnosis=="ADHD")
+aad<-mean(age.adhd$SRS_AGE)
+age.asd<-dt%>% select(SRS_AGE,PrimaryDiagnosis)%>%filter(PrimaryDiagnosis=="Autism")
+aas<-mean(age.asd$SRS_AGE)
+age.none<-dt%>% select(SRS_AGE,PrimaryDiagnosis)%>%filter(PrimaryDiagnosis=="None")
+ano<-mean(age.none$SRS_AGE)
+
+#Intellengence Score
+wis.adhd<-dt%>% select(WISC.GAI,PrimaryDiagnosis)%>%filter(PrimaryDiagnosis=="ADHD")
+wad<-mean(wis.adhd$WISC.GAI)
+
+wis.asd<-dt%>%select(WISC.GAI,PrimaryDiagnosis)%>%filter(PrimaryDiagnosis=="Autism")
+was<-mean(wis.asd$WISC.GAI)
+wis.none<-dt%>% select(WISC.GAI,PrimaryDiagnosis)%>% filter(PrimaryDiagnosis=="None")
+wno<-mean(wis.none$WISC.GAI)
+
+Table1<-dat <- data.frame(matrix(ncol = 6, nrow = 3))
+x <- c("Female","Male", "Age_Mean",  "Age_SD", "Intelligence_Mean","Intelligence_SD")
+colnames(dat) <- x
+y<-c("ADHD", "Autism", "None")
+rownames(dat) <- y
+dat[1,1]<-af
+dat[1,2]<-am
+dat[2,1]<-df
+dat[2,2]<-dm
+dat[3,1]<-nf
+dat[3,2]<-nm
+dat[1,3]<-aad
+dat[2,3]<-aas
+dat[3,3]<-ano
+dat[1,4]<-sd(age.adhd$SRS_AGE)
+dat[2,4]<-sd(age.asd$SRS_AGE)
+dat[3,4]<-sd(age.none$SRS_AGE)
+dat[1,5]<-wad
+dat[2,5]<-was
+dat[3,5]<-wno
+dat[1,6]<-sd(wis.adhd$WISC.GAI)
+dat[2,6]<-sd(wis.asd$WISC.GAI)
+dat[3,6]<-sd(wis.none$WISC.GAI)
+
+
+
+
+kable_styling(kable(dat))
+```
+
+#Result
+
+###Cheking in general
+```{r, message=FALSE, echo=FALSE}
+m1 = lm(dt$SRS_TotalRawScore ~ dt$mABC_TotalStandardScore )
+dt$resid = m1$residuals
+
+ggplot(dt, aes(x = mABC_TotalStandardScore, y = SRS_TotalRawScore)) + geom_point() + geom_smooth() + facet_wrap(vars(PrimaryDiagnosis)) + ggtitle("Movement Assessment vs. Social Deficit Faceted by Primary Diagnosis")
+ggplot(dt, aes(x = PrimaryDiagnosis, y=resid)) +geom_boxplot() + geom_jitter(col="Red") + ggtitle("Residual Analysis of Primary Diagnosis")
+```
+
+For the plot of ADHD, we can assess that the children with ADHD their motor skills scores are higher, their social deficits they will not have. The tendency goes decreasing. For the plot of Autism, we cannot directly assess that the children with ASD their motor skills scores are higher, their social deficits they will not have. But the children with ASD have a little difference with children with ADHD, because at the beginning of the motor skills, the relationship goes increasing, and then decreasing, but it becomes constant at the end. But the whole tendency goes slightly decreasing. So, we assess that higher the motor scores the lower social deficits score. For the plot of None, there is a slightly decreasing. 
+
+From the Boxplot, the points mainly concentrate on the box, and the separation of each box is very equality, there are not too much about outliers to influence the data.
+
+
+```{r, echo=FALSE}
+m1ad <- lm(dt.adhd$SRS_TotalRawScore ~ dt.adhd$mABC_TotalStandardScore)
+m1au <- lm(dt.aut$SRS_TotalRawScore ~ dt.aut$mABC_TotalStandardScore)
+m1no <- lm(dt.none$SRS_TotalRawScore ~ dt.none$mABC_TotalStandardScore)
+dt.none$resid <- m1no$residuals
+```
+
+```{r, echo=FALSE}
+ggplot(dt) + geom_point(aes(x=mABC_TotalStandardScore, y = SRS_TotalRawScore)) + geom_abline(aes(intercept =57.3525, slope = -1.0041, color = "ADHD")) + geom_abline(aes(intercept = 84.1179, slope = -0.2001, color = "Autism")) + geom_abline(aes(intercept = 34.218, slope = -0.6437, color = "None")) + ggtitle("Mobility Score vs. Social Deficit Showing Interaction of Primary Diagnosis")
+```
+
+According to this interaction plot, we assess that ADHD, Autism and None have different slops, but they are almost parallel, so that we assume there's no interaction between ADHD, Autism and None.
+
+
+###Checking Age
+```{r, message=FALSE, echo=FALSE}
+ggplot(dt, aes(x = mABC_AGE, y = SRS_TotalRawScore)) + geom_point() + geom_smooth() + ggtitle("Age vs. Social Deficit")
+
+ggplot(dt, aes(x=mABC_AGE, y = SRS_TotalRawScore)) + geom_point() + geom_smooth(aes(col = PrimaryDiagnosis)) + ggtitle("Age vs. Social Deficit Separated by Primary Diagnosis")
+```
+
+From the plot of the age vs social deficits, according to the smoother, we can tell that the relationship between them is slightly decreasing, so that age might be a reason influence social deficits. 
+
+From the plot of the age vs social deficits separated by Primary Diagnosis gives a more accurate relationship between the age and social deficits on individual diagnosis. For ADHD there is a slightly decreasing relationship. The Autism is more apparently for this deceasing relationship. But the None group is almost a flat line which shows a non-relationship between Age and Social Deficit.
+
+###Checking Intelligence
+
+```{r, warning = FALSE, message=FALSE, echo=FALSE}
+scatterplotMatrix(~SRS_TotalRawScore+mABC_TotalStandardScore+WISC.GAI, data=dt.adhd, reg.line="", cex=0.5 , pch=c(15,16,17) , main="Scatterplot Matrix~ADHD")
+
+scatterplotMatrix(~SRS_TotalRawScore+mABC_TotalStandardScore+WISC.GAI, data=dt.aut, reg.line="", cex=0.5 , pch=c(15,16,17) , main="Scatterplot Matrix~ASD")
+
+scatterplotMatrix(~SRS_TotalRawScore+mABC_TotalStandardScore+WISC.GAI, data=dt.none, reg.line="", cex=0.5 , pch=c(15,16,17) , main="Scatterplot Matrix~NONE")
+```
+
+From the first Scatterplot Matrix for ADHD, the relationship should be higher the motor skills, lower the social deficits and lower the Intelligence. But if we take a look only on the relationship between the social deficits and intelligence, we find out that the smoother is a flat line, which indicates it doesn't have a relationship between social deficits and intelligence.Therefore, children with ADHD indicate that higher motor skills, lower the social deficits, and higher the motor skills, the lower the intelligence. 
+
+From the second Scatterplot Matrix for ASD, the relationship should be higher the Intelligence, lower the motor skills and higher social deficits. But if we take a look only on the relationship between the social deficits and motor skills, we find out that the smoother is a flat line, which indicates it doesn't have a relationship between social deficits and motor skills .Therefore, children with ASD indicate that higher intelligence, lower the motor skills, and higher the intelligence, the higher the social deficits.
+
+From the third Scatterplot Matrix for NONE, the relationship should be higher the motor skills, lower the social deficits and lower the Intelligence. 
+
+So from the three Scatterplot Matrixes above, we may not need to take the intelligence into our consideration.
+
+```{r, echo=FALSE}
+m2ad <- lm(dt.adhd$SRS_TotalRawScore ~ dt.adhd$mABC_TotalStandardScore + dt.adhd$mABC_TotalStandardScore:dt.adhd$WISC.GAI)
+
+m2au <- lm(dt.aut$SRS_TotalRawScore ~ dt.aut$mABC_TotalStandardScore + dt.aut$mABC_TotalStandardScore:dt.aut$WISC.GAI)
+
+m2no <- lm(dt.none$SRS_TotalRawScore ~ dt.none$mABC_TotalStandardScore + dt.none$mABC_TotalStandardScore:dt.none$WISC.GAI)
+
+kable_styling(kable(anova(m2ad, m1ad)))
+
+kable_styling(kable(anova(m2au, m1au)))
+
+kable_styling(kable(anova(m2no, m1no)))
+```
+
+P-Value could give us a more accurate result to help us decided whether we need take Intelligence into account. The first P-value of ADHD is 0.2581068 which is too big to be significance. The second P-Value of ASD is 0.1883546 which is also too big to be significance. The third P-Value of None is 0.1003483 which is also too big to be significance. Therefore, according to all the P-values, we should not take Intelligence into our consideration.
+
+
+###Checking each Component of Motor skills
+```{r, echo=FALSE}
+red = lm(dt$SRS_TotalRawScore ~ dt$mABC_TotalStandardScore )
+
+full = lm(dt$SRS_TotalRawScore ~ dt$mABC_AimingAndCatching.Component.StandardScore + dt$mABC_Balance.Component.StandardScore + dt$mABC_ManualDexterity.Component.StandardScore)
+
+
+
+m3ad = lm(dt.adhd$SRS_TotalRawScore ~ dt.adhd$mABC_AimingAndCatching.Component.StandardScore + dt.adhd$mABC_Balance.Component.StandardScore + dt.adhd$mABC_ManualDexterity.Component.StandardScore)
+
+m3au = lm(dt.aut$SRS_TotalRawScore ~ dt.aut$mABC_AimingAndCatching.Component.StandardScore + dt.aut$mABC_Balance.Component.StandardScore + dt.aut$mABC_ManualDexterity.Component.StandardScore)
+
+m3no = lm(dt.none$SRS_TotalRawScore ~ dt.none$mABC_AimingAndCatching.Component.StandardScore + dt.none$mABC_Balance.Component.StandardScore + dt.none$mABC_ManualDexterity.Component.StandardScore)
+
+kable_styling(kable(anova(full, red)))
+kable_styling(kable(anova(m1ad, m3ad)))
+kable_styling(kable(anova(m1au, m3au)))
+kable_styling(kable(anova(m1no, m3no)))
+```
+
+The general(first) P-Value is 0.0012181 of the general motor skill and social deficits, p-value is smallar enough which indicates the motor skill is significance. 
+?????
+
+
+###Checking the ADHD sub-type
+```{r, echo=FALSE}
+m.ad <- lm(dt.adhd$SRS_TotalRawScore ~ dt.adhd$mABC_TotalStandardScore)
+dt.adhd$resid = m.ad$residuals
+
+ggplot(dt.adhd, aes(x=ADHD_Subtype, y=resid)) + geom_boxplot() +geom_jitter(col="red") + ggtitle("Residual Analysis of ADHD Subtype")
+
+m4ad <- lm(dt.adhd$SRS_TotalRawScore ~ dt.adhd$mABC_TotalStandardScore + dt.adhd$ADHD_Subtype)
+
+anova(m4ad, m1ad)
+dt.adhd$resid <- m4ad$residuals
+
+ggplot(dt.adhd, aes(x=mABC_TotalStandardScore, y = SRS_TotalRawScore)) + geom_point() + geom_smooth(method = "lm", aes(color = SecondaryDiagnosis))
+
+m5ad <- lm(dt.adhd$SRS_TotalRawScore ~ dt.adhd$mABC_TotalStandardScore + dt.adhd$ADHD_Subtype + dt.adhd$mABC_TotalStandardScore:dt.adhd$ADHD_Subtype)
+
+kable_styling(kable(anova(m5ad, m4ad)))
+
+```
+According to the boxlplot, we plus Hyperactive and Inattentive to compare with Combined, this shows that it not constant and the mean is different so need to consider ADHD_subtype.
+
+The p-value is 0.1542089 which is not significance that we don't need to take into account.
+
+The third plot is the secondary Diagnosis. The children with the Secondary Diagnosis, the smoother is almost a flat line, so that we don't take consideration of secondary Diagnosis of ADHD Sub-type as well.
+
+
+### Checking Secondary Diagonsis
+```{r, echo=FALSE}
+m.aut <- lm(dt.aut$SRS_TotalRawScore ~ dt.aut$mABC_TotalStandardScore)
+dt.aut$resid <- m.aut$residuals
+
+ggplot(dt.aut, aes(x=SecondaryDiagnosis, y=resid)) + geom_boxplot() +geom_jitter(col="red") + ggtitle("Residual Analysis of Secondary Diagnoses")
+
+m4au <- lm(dt.aut$SRS_TotalRawScore ~ dt.aut$mABC_TotalStandardScore + dt.aut$SecondaryDiagnosis)
+
+kable_styling(kable(anova(m4au, m1au)))
+
+ggplot(dt.aut, aes(x = mABC_TotalStandardScore, y = SRS_TotalRawScore)) + geom_point() + geom_smooth(method = "lm", aes(col = SecondaryDiagnosis))
+
+m5au <- lm(dt.aut$SRS_TotalRawScore ~ dt.aut$mABC_TotalStandardScore + dt.aut$mABC_TotalStandardScore:dt.aut$SecondaryDiagnosis)
+
+kable_styling(kable(anova(m5au, m1au)))
+```
+
+The first plot is a boxplot which indicates that most of the children take secondary diagnosis. But the P-value of this model is 0.82 which is too big to be significance. The third plot is the secondary Diagnosis. The children with the Secondary Diagnosis, the smoother is almost a flat line, so that we don't take consideration of secondary Diagnosis as well.
+
+
+### Checking for Gender
+```{r, message=FALSE,echo=FALSE}
+ggplot(dt.adhd, aes(x=mABC_TotalStandardScore, y = SRS_TotalRawScore)) + geom_point() + geom_smooth(method = "lm", aes(col = Gender)) + ggtitle("Movement Assessment vs. Social Deficit for ADHD")
+
+ggplot(dt.adhd, aes(x = Gender, y = resid)) + geom_boxplot() + geom_jitter(col = "red")
+
+ggplot(dt.aut, aes(x=mABC_TotalStandardScore, y = SRS_TotalRawScore)) + geom_point() + geom_smooth(method = "lm", aes(col = Gender)) + ggtitle("Movement Assessment vs. Social Deficit for Autism")
+
+ggplot(dt.aut, aes(x = Gender, y = resid)) + geom_boxplot() + geom_jitter(col = "red")
+
+ggplot(dt.none, aes(x=mABC_TotalStandardScore, y = SRS_TotalRawScore)) + geom_point() + geom_smooth(method = "lm", aes(col = Gender)) + ggtitle("Movement Assessment vs. Social Deficit for Typical Development")
+
+ggplot(dt.none, aes(x = Gender, y = resid)) + geom_boxplot() + geom_jitter(col = "red")
+
+m4no <- lm(dt.none$SRS_TotalRawScore ~ dt.none$mABC_TotalStandardScore + dt.none$Gender)
+
+kable_styling(kable(anova(m4no, m1no)))
+```
+
+The first two plots are the Gender of ADHD, which the first plot is almost two parallel lines, and the boxplot is very constant as well. So Gender is not significance in ADHD group. The third and fourth plots are Gender of ASD. The third plot the two smoothers are almost superposition, but even the beginning and the end have slightly separate, but we still don't need to consider it. The last two plots are the Gender of TD, which the smoothers are two very similar lines, so we don't take into account. The last one is P-value which is 0.1354 which is too big to be significance.
+
+### Final model for ADHD 
+```{r, warning=FALSE,message=FALSE, echo=FALSE}
+summary(m4ad)
+```
+
+
+### Final model for ASD
+```{r}
+summary(m1au)
+```
+
+### Final model for TD
+```{r}
+summary(m1no)
+
+
+```
+
+The first plot is ADHD. we at first want to take not only motor skills, but age, gender, intelligence and sub-type into account, but after hypothesis test, we find out all of them are not significance except motor skills. So we use the only significant predictor-motor skills to draw the relationship between motor skills and social deficits, and it appears a decreasing relationship which means the higher the motor skills, the lower the social deficits.
+
+The second plot is Autism, we first want to include not only motor skills, but age, gender, intelligence as the predictor, but after hypothesis test, the only significance is motor skills, so that we draw the relationship between motor skill and social deficits, it appears a slightly decreasing, which means the higher the motor skills, the lower the social deficits.
+
+The thrid plot is TD(None), same with the Autsim, we first want to include not only motor skills, but age, gender, intelligence as the predictor, but after hypothesis test, the only significance is motor skills, so that we draw the relationship between motor skill and social deficits, it appears a decreasing trend, which means the higher the motor skills, the lower the social deficits.
+
+
+```{r, warning=FALSE, message = FALSE, echo=FALSE}
+fin.mod = lm(dt$SRS_TotalRawScore ~ dt$mABC_AimingAndCatching.Component.StandardScore + dt$mABC_Balance.Component.StandardScore + dt$mABC_ManualDexterity.Component.StandardScore + dt$PrimaryDiagnosis )
+
+summary(fin.mod)
+
+plot(fin.mod)
+```
+
+From the model, it shows all x variables we have are significant, and the second plot shows the residual is basically a flat line, so the model is good. The third show a pretty good normal distribution, and last plot shows, the model doesn't have influential points.
+
+#Conclusion
+
+  All in all, what we are explore are the relationship between the motor skills and social deficits. Moreover, we are trying to find out, except motor skills, age, gender and intelligence will be other predictors that may have affect on social deficits. Therefore, we built several models to prove our assumption.  Unfortunately, all the models failed to prove our hypothesis. Firstly, the age. We built a model for age with three diagnosis, but their p-value is so big that reject null hypothesis. Therefore, we exclude the age as our predictor.  Secondly, the intelligence. We also built a model to see the p-value. However, same condition with the age. The p-value is too big to be significance, so that we exclude intelligence as predictor. The third one is gender. Its p-value is also too big that we cannot take it into account. Meanwhile, we also test for the ADHD subtype and secondary diagnosis. Unfortunately, both of them are excluded as a predictor, because their p-value is bigger than 0.05 . 
+
+  Then we separate children in three groups by Diagnosis, they are ADHD, ASD and TD. In the ADHD group, the relationship between the motor skill and social deficits is decreasing, which indicates higher score of the motor skill, the lower score of the social deficits. In the ASD group, the relationship between the motor skill and social deficits is not as clear as ADHD, but still the trend goes slightly decreasing, which indicates higher score of the motor skill, the lower score of the social deficits. . In the TD group, the relationship between the motor skill and social deficits is apparently decreasing, which indicates higher score of the motor skill, the lower score of the social deficits.
+
+
+
+##Referene
+* Developmental disorder. (2018). Retrieved from https://en.wikipedia.org/wiki/Developmental_disorder
+
+* Attention-deficit/hyperactivity disorder (ADHD) in children - Symptoms and causes. (2018). Retrieved from https://www.mayoclinic.org/diseases-conditions/adhd/symptoms-causes/syc-20350889?utm_source=Google&utm_medium=abstract&utm_content=Attention-deficit-hyperactivity-disorder&utm_campaign=Knowledge-panel
+
+* Collingwood, J. (2018). ADHD and Gender. Retrieved from https://psychcentral.com/lib/adhd-and-gender/
+
+* When do children usually show symptoms of autism?. (2018). Retrieved from https://www.nichd.nih.gov/health/topics/autism/conditioninfo/symptoms-appear
+
+* Sarris, M. (2018). Measuring Intelligence in Autism | Interactive Autism Network. Retrieved from https://iancommunity.org/ssc/measuring-iq-autism
