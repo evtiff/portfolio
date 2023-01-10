@@ -5,6 +5,9 @@ This portfolio outlines major projects done throughout my educational and profes
 
 Folders:
 
+Linear Modeling KKI Project (R programming):
+  First undergraduate class utilizing R Programming. The purpose of the project was to utilize data to form a model predicting ASD/ADHD from the KKI assessment.
+
 Nonparametric Data Analysis (R programming):
   Undergraduate/graduate mixed class taken at IU. Survey of methods for statistical inference that do not rely on parametric probability models. Statistical
   functionals, bootstrapping, empirical likelihood. Nonparametric density and curve estimations. Rank and permutation tests.
@@ -25,6 +28,9 @@ Econometrics (Python/Jupityr Notebook):
 Business Analytics with R (R programming):
   Graduate class taken at Purdue. The project included utilizes R Shiny to create a working dashboard allowing for students currently job searching to find help
   with resume readiness and job opportunity chances. 
+  
+Spotify Tableau Storyboard (Tableau):
+  Final Project for a class utilizing Tableau to create dashboards and storyboards with applications in business.
   
 Industry Practicum:
   Capstone project for MS BAIM degree. Worked with Red Roof Inn on a detector for anomalies in reservations within a 48 hour window. Utilized python and R for 
