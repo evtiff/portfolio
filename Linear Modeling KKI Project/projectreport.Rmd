@@ -67,10 +67,10 @@ wisclook5$source <- NULL
 
 ## FUll Join used to combine tables to easily make plots etc.
 
-data_plot <- full_join(data_mabc, data_soc, by = "ï..ID") %>% filter(!(is.na(SRS_VERSION)))
-data_plot <- full_join(data_plot, data_dem, by = "ï..ID")
+data_plot <- full_join(data_mabc, data_soc, by = "Ã¯..ID") %>% filter(!(is.na(SRS_VERSION)))
+data_plot <- full_join(data_plot, data_dem, by = "Ã¯..ID")
 
-dat.tot <- full_join(data_plot, data_wisc, by = "ï..ID")
+dat.tot <- full_join(data_plot, data_wisc, by = "Ã¯..ID")
 dat.tot4 <- dat.tot %>% filter(WISC_VERSION == 4)
 dat.tot5 <- dat.tot%>% filter(WISC_VERSION == 5)
 
